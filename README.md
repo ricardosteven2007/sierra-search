@@ -10,3 +10,11 @@ in parallel and selects the best answer.
 - Designed to be expandable (add more adapters easily)
 
 ## Project Structure
+
+sierra-search/
+├── main.py
+├── adapters/
+│   ├── tavily.py
+│   └── brave.py
+├── .gitignore
+└── README.md
