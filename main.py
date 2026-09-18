@@ -1,38 +1,28 @@
 # ============================================================
-# STEVE.PY — MAIN RUNNER / ORCHESTRATOR
-#
-# What this file is:
-# - This is the ONLY file you run in the terminal
-# - This file does NOT talk to APIs directly
+# MAIN.PY — MAIN RUNNER / ORCHESTRATOR
 #
 # What this file does:
-# - Sends the same question to multiple adapters
+# - Sends the same question to multiple search adapters
+# - Runs the adapters in parallel
 # - Collects their results
-# - Chooses the "best" answer
+# - Chooses the best answer using simple scoring rules
 #
 # Think of this like:
-# - adapters = engines
-# - steve.py = the driver
+# - adapters = search engines
+# - main.py = the driver
 # ============================================================
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from adapters.tavily_adapter import tavily_query
 from adapters.brave_adapter import brave_query
 
-# ============================================================
-# SERVICE PARAMETER
-# CHANGE ONLY THIS LINE TO ASK A DIFFERENT QUESTION
-# ============================================================
-
-QUERY = "What is Phillipa Soo's vocal range?"
 
 # ============================================================
-# LIST OF APIS TO RUN
+# LIST OF SEARCH ADAPTERS
 #
-# Each item:
-# - name: just for tracking/debugging
-# - function: the adapter function
-#
-# When we add more APIs, we ONLY touch this list
+# To add another search provider later,
+# add its adapter function to this list.
 # ============================================================
 
 ADAPTERS = [
@@ -40,54 +30,93 @@ ADAPTERS = [
     ("brave", brave_query),
 ]
 
+
 # ============================================================
-# RUN ALL ADAPTERS
+# RUN ALL ADAPTERS IN PARALLEL
 #
-# Sends the same query to every adapter
-# If one API fails, the others still run
+# Tavily and Brave search at the same time.
+# If one API fails, the other can still return results.
 # ============================================================
 
 def run_all(query: str) -> list[dict]:
     results = []
 
-    for name, fn in ADAPTERS:
-        try:
-            out = fn(query)
-            out["provider"] = name  # tag where it came from
-            results.append(out)
-        except Exception as e:
-            results.append({
-                "provider": name,
-                "answer": f"[ERROR from {name}] {e}",
-                "sources": [],
-            })
+    with ThreadPoolExecutor(max_workers=len(ADAPTERS)) as executor:
+        futures = {
+            executor.submit(fn, query): name
+            for name, fn in ADAPTERS
+        }
+
+        for future in as_completed(futures):
+            name = futures[future]
+
+            try:
+                out = future.result()
+                out["provider"] = name
+                out["error"] = False
+                results.append(out)
+
+            except Exception as e:
+                results.append({
+                    "provider": name,
+                    "answer": f"[ERROR from {name}] {e}",
+                    "sources": [],
+                    "error": True,
+                })
 
     return results
 
+
 # ============================================================
-# PICK BEST ANSWER (SIMPLE VERSION ON PURPOSE)
+# PICK BEST ANSWER
 #
 # Rules:
-# - Prefer answers that actually say something
-# - Prefer answers with more sources
-#
-# Later this becomes AI logic
+# - Never choose an API error as the best answer
+# - Prefer a direct answer
+# - Prefer results with more sources
 # ============================================================
 
 def pick_best(results: list[dict]) -> dict:
-    def score(r: dict) -> int:
-        has_answer = 1 if "No direct answer" not in r.get("answer", "") else 0
-        num_sources = len(r.get("sources", []))
-        return (has_answer * 100) + num_sources
+    successful_results = [
+        result for result in results
+        if not result.get("error", False)
+    ]
 
-    return max(results, key=score)
+    if not successful_results:
+        return {
+            "provider": "none",
+            "answer": "All search providers failed.",
+            "sources": [],
+            "error": True,
+        }
+
+    def score(result: dict) -> int:
+        answer = result.get("answer", "")
+
+        has_direct_answer = (
+            bool(answer)
+            and "No direct answer" not in answer
+        )
+
+        num_sources = len(result.get("sources", []))
+
+        return (100 if has_direct_answer else 0) + num_sources
+
+    return max(successful_results, key=score)
+
 
 # ============================================================
 # MAIN ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":
-    all_results = run_all(QUERY)
+    query = input("Enter a search question: ").strip()
+
+    if not query:
+        print("Please enter a question.")
+        raise SystemExit
+
+    all_results = run_all(query)
 
     best = pick_best(all_results)
 
@@ -95,12 +124,15 @@ if __name__ == "__main__":
     print(best.get("answer", "[No answer]"))
 
     print("\n=== BEST SOURCES ===")
-    i = 1
-    for s in best.get("sources", []):
-        print(f"{i}. {s.get('title', '')} - {s.get('url', '')}")
-        i += 1
+    for i, source in enumerate(best.get("sources", []), start=1):
+        title = source.get("title", "")
+        url = source.get("url", "")
+        print(f"{i}. {title} - {url}")
 
-    # Debug: see what every API returned
     print("\n=== DEBUG: WHAT EACH API RETURNED ===")
-    for r in all_results:
-        print(f"- {r.get('provider')}: {len(r.get('sources', []))} sources")
+    for result in all_results:
+        provider = result.get("provider")
+        source_count = len(result.get("sources", []))
+        status = "ERROR" if result.get("error") else "OK"
+
+        print(f"- {provider}: {source_count} sources ({status})")
