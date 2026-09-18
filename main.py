@@ -13,10 +13,12 @@
 # ============================================================
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
 
 from adapters.tavily_adapter import tavily_query
 from adapters.brave_adapter import brave_query
 
+load_dotenv()
 
 # ============================================================
 # LIST OF SEARCH ADAPTERS
@@ -29,7 +31,6 @@ ADAPTERS = [
     ("tavily", tavily_query),
     ("brave", brave_query),
 ]
-
 
 # ============================================================
 # RUN ALL ADAPTERS IN PARALLEL
