@@ -15,7 +15,7 @@ in parallel and selects the best answer.
 sierra-search/
 ├── main.py
 ├── adapters/
-│   ├── tavily.py
-│   └── brave.py
+│   ├── tavily_adapter.py
+│   └── brave_adapter.py
 ├── .gitignore
 └── README.md
