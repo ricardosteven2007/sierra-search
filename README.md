@@ -11,6 +11,7 @@ in parallel and selects the best answer.
 
 ## Project Structure
 
+```text
 sierra-search/
 ├── main.py
 ├── adapters/
