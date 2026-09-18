@@ -1,4 +1,4 @@
-# steve-search
+# sierra-search
 
 A small search orchestrator that runs multiple search APIs (Tavily + Brave)
 in parallel and selects the best answer.
