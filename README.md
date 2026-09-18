@@ -17,7 +17,9 @@ sierra-search/
 ├── adapters/
 │   ├── tavily_adapter.py
 │   └── brave_adapter.py
+├── .env.example
 ├── .gitignore
+├── requirements.txt
 └── README.md
 
 ## Setup
